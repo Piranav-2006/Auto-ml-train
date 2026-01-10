@@ -103,7 +103,7 @@ def train_model_logic(csv_url, email, callback_url=None):
         if problem_type == "classification":
             # For general purpose, we'll use CatBoost's native handling
             model = CatBoostClassifier(
-                iterations=100, # Further reduced for speed
+                iterations=50, # Even lower for Render timeout safety
                 learning_rate=0.1,
                 depth=6,
                 loss_function='MultiClass' if len(np.unique(y)) > 2 else 'Logloss',
@@ -125,7 +125,7 @@ def train_model_logic(csv_url, email, callback_url=None):
             }
         else:
             model = CatBoostRegressor(
-                iterations=100, # Further reduced for speed
+                iterations=50, # Even lower for Render timeout safety
                 learning_rate=0.1,
                 depth=6,
                 loss_function='RMSE',
