@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, mean_squared_error, r2_score
-from catboost import CatBoostClassifier, CatBoostRegressor
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 import requests
 import threading
 
@@ -65,9 +65,11 @@ def train_model_logic(csv_url, email, callback_url=None):
         for col in numeric_cols:
             X[col] = X[col].fillna(X[col].median())
 
-        # Impute categorical with 'Missing'
+        # Impute categorical with 'Missing' and Label Encode
         for col in categorical_cols:
             X[col] = X[col].fillna("Missing").astype(str)
+            le = LabelEncoder()
+            X[col] = le.fit_transform(X[col])
 
         # 6. Determine Problem Type & Encode Target
         # Force conversion to numeric if possible
@@ -101,17 +103,9 @@ def train_model_logic(csv_url, email, callback_url=None):
         
         # 8. Model Training
         if problem_type == "classification":
-            # For general purpose, we'll use CatBoost's native handling
-            model = CatBoostClassifier(
-                iterations=50, # Even lower for Render timeout safety
-                learning_rate=0.1,
-                depth=6,
-                loss_function='MultiClass' if len(np.unique(y)) > 2 else 'Logloss',
-                verbose=False,
-                random_seed=42
-            )
-                
-            model.fit(X_train, y_train, cat_features=categorical_cols)
+            # Random Forest is much faster and uses less RAM than CatBoost
+            model = RandomForestClassifier(n_estimators=100, random_state=42)
+            model.fit(X_train, y_train)
 
             y_pred = model.predict(X_test)
             accuracy = accuracy_score(y_test, y_pred)
@@ -121,18 +115,11 @@ def train_model_logic(csv_url, email, callback_url=None):
                 "type": "Classification", 
                 "metrics": {"accuracy": float(accuracy)},
                 "email": email,
-                "message": f"Training successful! Accuracy: {accuracy*100:.2f}% (Model: CatBoost)"
+                "message": f"Training successful! Accuracy: {accuracy*100:.2f}% (Model: Random Forest)"
             }
         else:
-            model = CatBoostRegressor(
-                iterations=50, # Even lower for Render timeout safety
-                learning_rate=0.1,
-                depth=6,
-                loss_function='RMSE',
-                verbose=False,
-                random_seed=42
-            )
-            model.fit(X_train, y_train, cat_features=categorical_cols)
+            model = RandomForestRegressor(n_estimators=100, random_state=42)
+            model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
             
             mse = mean_squared_error(y_test, y_pred)
@@ -141,7 +128,7 @@ def train_model_logic(csv_url, email, callback_url=None):
             
             result = {
                 "status": "Complete", 
-                "message": f"Training successful! (Model: CatBoost)",
+                "message": f"Training successful! (Model: Random Forest)",
                 "details": f"RMSE: {rmse:.2f}, R2 Score: {r2:.4f}"
             }
             
