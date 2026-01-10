@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, mean_squared_error, r2_score
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 import requests
 import threading
 
@@ -26,8 +26,8 @@ def train_model_logic(csv_url, email, callback_url=None):
     try:
         print(f"Starting general training for {email} with data from {csv_url}")
         
-        # 1. Load Dataset
-        df = pd.read_csv(csv_url)
+        # 1. Load Dataset (Limit to 10k rows for speed on Render)
+        df = pd.read_csv(csv_url, nrows=10000)
         
         # 2. Identify Target Column (Assume last column is target)
         target_col = df.columns[-1]
@@ -103,8 +103,8 @@ def train_model_logic(csv_url, email, callback_url=None):
         
         # 8. Model Training
         if problem_type == "classification":
-            # Random Forest is much faster and uses less RAM than CatBoost
-            model = RandomForestClassifier(n_estimators=100, random_state=42)
+            # Decision Tree is even faster than Random Forest
+            model = DecisionTreeClassifier(max_depth=10, random_state=42)
             model.fit(X_train, y_train)
 
             y_pred = model.predict(X_test)
@@ -115,10 +115,10 @@ def train_model_logic(csv_url, email, callback_url=None):
                 "type": "Classification", 
                 "metrics": {"accuracy": float(accuracy)},
                 "email": email,
-                "message": f"Training successful! Accuracy: {accuracy*100:.2f}% (Model: Random Forest)"
+                "message": f"Training successful! Accuracy: {accuracy*100:.2f}% (Model: Decision Tree)"
             }
         else:
-            model = RandomForestRegressor(n_estimators=100, random_state=42)
+            model = DecisionTreeRegressor(max_depth=10, random_state=42)
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
             
@@ -128,7 +128,7 @@ def train_model_logic(csv_url, email, callback_url=None):
             
             result = {
                 "status": "Complete", 
-                "message": f"Training successful! (Model: Random Forest)",
+                "message": f"Training successful! (Model: Decision Tree)",
                 "details": f"RMSE: {rmse:.2f}, R2 Score: {r2:.4f}"
             }
             
