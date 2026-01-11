@@ -113,9 +113,9 @@ app.post(
       // ✅ Delete local file (important on Render)
       if (fs.existsSync(csvPath)) fs.unlinkSync(csvPath);
 
-      // ✅ Trigger n8n Workflow
-      const n8nUploadUrl = process.env.N8N_UPLOAD_WEBHOOK || "https://n8n-1-wpup.onrender.com/webhook-test/ml-upload";
-      const n8nCallbackUrl = process.env.N8N_CALLBACK_URL || "https://auto-ml-train.onrender.com/api/callback";
+      // ✅ Trigger n8n Workflow (PRODUCTION MODE)
+      const n8nUploadUrl = process.env.N8N_UPLOAD_WEBHOOK || "https://n8n-1-wpup.onrender.com/webhook/ml-upload";
+      const n8nCallbackUrl = process.env.N8N_CALLBACK_URL || "https://auto-ml-train-1.onrender.com/api/callback";
 
       console.log("Triggering n8n at:", n8nUploadUrl);
       const n8nRes = await axios.post(
