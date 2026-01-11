@@ -112,27 +112,28 @@ def train_model_logic(csv_url, email):
             problem_type = "classification"
             # Filter classes with only 1 member (causes train_test_split failure)
             class_counts = y.value_counts()
-            rare_classes = class_counts[class_counts < 2].index
+            rare_classes = class_counts[class_counts < 3].index # Increased to 3 for safer splitting
             if not rare_classes.empty:
-                log(f"Removing rare classes with only 1 sample: {list(rare_classes)}")
+                log(f"Removing rare classes with < 3 samples: {list(rare_classes)}")
                 mask = ~y.isin(rare_classes)
                 X = X[mask]
                 y = y[mask]
             
-            le_y = LabelEncoder()
-            y = le_y.fit_transform(y.astype(str))
-            log(f"Detected: Classification ({len(le_y.classes_)} classes)")
+            # Check if we still have enough data
+            if len(y) < 10:
+                problem_type = "regression" # Fallback if classification fails
+            else:
+                le_y = LabelEncoder()
+                y = le_y.fit_transform(y.astype(str))
+                log(f"Detected: Classification ({len(le_y.classes_)} classes)")
         else:
             problem_type = "regression"
             log("Detected: Regression")
 
         # 5. Advanced Training with K-Fold Cross Validation
-        log(f"Initializing K-Fold Training for maximum robustness...")
+        log(f"Initializing XGBoost Training...")
         
         if problem_type == "classification":
-            le_y = LabelEncoder()
-            y = le_y.fit_transform(y.astype(str))
-            
             # Automated Class Weight Balancing (Crucial for medical data)
             counts = np.bincount(y)
             imb_ratio = counts[0] / counts[1] if len(counts) == 2 else 1
@@ -150,7 +151,7 @@ def train_model_logic(csv_url, email):
                 random_state=42,
                 tree_method="hist",
                 scale_pos_weight=imb_ratio, # Handle imbalance
-                objective='binary:logistic' if len(le_y.classes_) == 2 else 'multi:softprob'
+                objective='binary:logistic' if len(np.unique(y)) == 2 else 'multi:softprob'
             )
             
             model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
@@ -160,8 +161,8 @@ def train_model_logic(csv_url, email):
             result = {
                 "status": "Complete", 
                 "metrics": {"accuracy": float(acc)},
-                "accuracy_formatted": f"{acc*100:.2f}%",
-                "message": f"High-precision model trained! Accuracy boosted to {acc*100:.2f}%."
+                "display_metric": f"{acc*100:.2f}% (Accuracy)",
+                "message": f"High-precision XGBoost model trained! Accuracy: {acc*100:.2f}%."
             }
         else:
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -178,11 +179,12 @@ def train_model_logic(csv_url, email):
             model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
             mse = mean_squared_error(y_test, model.predict(X_test))
             r2 = r2_score(y_test, model.predict(X_test))
-            log(f"Regression DONE. R2: {r2:.4f}")
+            log(f"XGBoost Regression DONE. R2: {r2:.4f}")
             result = {
                 "status": "Complete", 
                 "metrics": {"r2": float(r2), "rmse": float(np.sqrt(mse))},
-                "message": f"Cloud training successful! (Trained on {len(df)} rows)"
+                "display_metric": f"{r2:.4f} (R2 Score)",
+                "message": f"High-precision XGBoost model trained! R2 Score: {r2:.4f}."
             }
             
         log("FINISHED.")
