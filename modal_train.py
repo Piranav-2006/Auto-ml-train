@@ -6,7 +6,7 @@ import io
 import requests
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, mean_squared_error, r2_score
-from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
+from xgboost import XGBClassifier, XGBRegressor
 from sklearn.preprocessing import LabelEncoder
 
 # 1. Define the Modal Image
@@ -15,7 +15,8 @@ image = modal.Image.debian_slim().pip_install(
     "numpy",
     "scikit-learn",
     "requests",
-    "fastapi"
+    "fastapi",
+    "xgboost"
 )
 
 app = modal.App("auto-ml-trainer")
@@ -97,21 +98,23 @@ def train_model_logic(csv_url, email):
             problem_type = "regression"
             log("Detected: Regression")
 
-        # 5. Fast Training with HistGradientBoosting (Lightning Fast)
-        log("Initializing fast training...")
+        # 5. Fast Training with XGBoost (Powerful & Industry Standard)
+        log("Initializing powerful XGBoost training...")
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
         if problem_type == "classification":
-            # Better hyperparameters for accuracy
-            model = HistGradientBoostingClassifier(
-                max_iter=300, 
-                max_depth=10, 
-                early_stopping=True,
-                random_state=42
+            # Powerful hyperparameters for XGBoost
+            model = XGBClassifier(
+                n_estimators=1000, 
+                max_depth=6, 
+                learning_rate=0.05,
+                early_stopping_rounds=50,
+                random_state=42,
+                tree_method="hist" # Fast histogram optimized
             )
-            model.fit(X_train, y_train)
+            model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
             acc = accuracy_score(y_test, model.predict(X_test))
-            log(f"Classification DONE. Acc: {acc:.4f}")
+            log(f"XGBoost Classification DONE. Acc: {acc:.4f}")
             result = {
                 "status": "Complete", 
                 "metrics": {"accuracy": float(acc)},
@@ -119,13 +122,15 @@ def train_model_logic(csv_url, email):
                 "message": f"Cloud training successful! (Trained on {len(df)} rows)"
             }
         else:
-            model = HistGradientBoostingRegressor(
-                max_iter=300, 
-                max_depth=10, 
-                early_stopping=True,
-                random_state=42
+            model = XGBRegressor(
+                n_estimators=1000, 
+                max_depth=6, 
+                learning_rate=0.05,
+                early_stopping_rounds=50,
+                random_state=42,
+                tree_method="hist"
             )
-            model.fit(X_train, y_train)
+            model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
             mse = mean_squared_error(y_test, model.predict(X_test))
             r2 = r2_score(y_test, model.predict(X_test))
             log(f"Regression DONE. R2: {r2:.4f}")
