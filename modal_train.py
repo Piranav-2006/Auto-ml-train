@@ -41,8 +41,8 @@ def train_model_logic(csv_url, email):
             for chunk in r.iter_content(chunk_size=8192):
                 buffer.write(chunk)
             buffer.seek(0)
-            # Increased rows for maximum accuracy (50k is safe for 4GB memory)
-            df = pd.read_csv(buffer, nrows=50000)
+            # Optimized row count for speed vs accuracy balance
+            df = pd.read_csv(buffer, nrows=35000)
             log(f"CSV Loaded. Shape: {df.shape}")
         except Exception as e:
             log(f"Download FAILED: {str(e)}")
@@ -142,15 +142,16 @@ def train_model_logic(csv_url, email):
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
             
             model = XGBClassifier(
-                n_estimators=2000, 
-                max_depth=7, 
-                learning_rate=0.02,
+                n_estimators=1000, 
+                max_depth=6, 
+                learning_rate=0.05,
                 subsample=0.8,
                 colsample_bytree=0.9,
-                early_stopping_rounds=100,
+                early_stopping_rounds=50,
                 random_state=42,
                 tree_method="hist",
-                scale_pos_weight=imb_ratio, # Handle imbalance
+                scale_pos_weight=imb_ratio,
+                n_jobs=-1, # Use all available cores
                 objective='binary:logistic' if len(np.unique(y)) == 2 else 'multi:softprob'
             )
             
@@ -167,14 +168,15 @@ def train_model_logic(csv_url, email):
         else:
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
             model = XGBRegressor(
-                n_estimators=2000, 
-                max_depth=7, 
-                learning_rate=0.02,
+                n_estimators=1000, 
+                max_depth=6, 
+                learning_rate=0.05,
                 subsample=0.8,
                 colsample_bytree=0.9,
-                early_stopping_rounds=100,
+                early_stopping_rounds=50,
                 random_state=42,
-                tree_method="hist"
+                tree_method="hist",
+                n_jobs=-1
             )
             model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
             mse = mean_squared_error(y_test, model.predict(X_test))
