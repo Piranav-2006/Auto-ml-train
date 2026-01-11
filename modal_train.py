@@ -23,13 +23,13 @@ image = modal.Image.debian_slim().pip_install(
 app = modal.App("auto-ml-trainer")
 
 @app.function(image=image, timeout=600, cpu=2.0, memory=4096)
-def train_model_logic(csv_url, email):
+def train_model_logic(csv_url, email, job_id=None):
     start_time = time.time()
     def log(msg):
         print(f"--- [{time.time() - start_time:.2f}s] {msg}")
 
     try:
-        log(f"STARTING TRAINING for user {email}")
+        log(f"STARTING TRAINING for user {email} (Job: {job_id})")
         
         # 1. Download CSV with better handling
         log(f"Connecting to: {csv_url}")
@@ -41,8 +41,8 @@ def train_model_logic(csv_url, email):
             for chunk in r.iter_content(chunk_size=8192):
                 buffer.write(chunk)
             buffer.seek(0)
-            # Optimized row count for speed vs accuracy balance
-            df = pd.read_csv(buffer, nrows=35000)
+            # Increased rows for maximum accuracy (50k is safe for 4GB memory)
+            df = pd.read_csv(buffer, nrows=50000)
             log(f"CSV Loaded. Shape: {df.shape}")
         except Exception as e:
             log(f"Download FAILED: {str(e)}")
@@ -142,16 +142,15 @@ def train_model_logic(csv_url, email):
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
             
             model = XGBClassifier(
-                n_estimators=1000, 
-                max_depth=6, 
-                learning_rate=0.05,
+                n_estimators=2000, 
+                max_depth=7, 
+                learning_rate=0.02,
                 subsample=0.8,
                 colsample_bytree=0.9,
-                early_stopping_rounds=50,
+                early_stopping_rounds=100,
                 random_state=42,
                 tree_method="hist",
-                scale_pos_weight=imb_ratio,
-                n_jobs=-1, # Use all available cores
+                scale_pos_weight=imb_ratio, # Handle imbalance
                 objective='binary:logistic' if len(np.unique(y)) == 2 else 'multi:softprob'
             )
             
@@ -161,6 +160,7 @@ def train_model_logic(csv_url, email):
             
             result = {
                 "status": "Complete", 
+                "jobId": job_id,
                 "metrics": {"accuracy": float(acc)},
                 "display_metric": f"{acc*100:.2f}% (Accuracy)",
                 "message": f"High-precision XGBoost model trained! Accuracy: {acc*100:.2f}%."
@@ -168,15 +168,14 @@ def train_model_logic(csv_url, email):
         else:
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
             model = XGBRegressor(
-                n_estimators=1000, 
-                max_depth=6, 
-                learning_rate=0.05,
+                n_estimators=2000, 
+                max_depth=7, 
+                learning_rate=0.02,
                 subsample=0.8,
                 colsample_bytree=0.9,
-                early_stopping_rounds=50,
+                early_stopping_rounds=100,
                 random_state=42,
-                tree_method="hist",
-                n_jobs=-1
+                tree_method="hist"
             )
             model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
             mse = mean_squared_error(y_test, model.predict(X_test))
@@ -184,6 +183,7 @@ def train_model_logic(csv_url, email):
             log(f"XGBoost Regression DONE. R2: {r2:.4f}")
             result = {
                 "status": "Complete", 
+                "jobId": job_id,
                 "metrics": {"r2": float(r2), "rmse": float(np.sqrt(mse))},
                 "display_metric": f"{r2 * 100:.2f}%",
                 "message": f"High-precision XGBoost model trained on {len(df)} rows! R2 Score: {r2*100:.2f}%."
@@ -205,10 +205,11 @@ def train(data: dict):
 
     csv_url = data.get('csvUrl') or data.get('csv_url')
     email = data.get('email')
+    job_id = data.get('jobId') or data.get('job_id')
 
     if not csv_url or not email:
         return {"error": "csvUrl and email are required (POST json fields)"}
 
     # Run the training logic cloud-side
-    result = train_model_logic.remote(csv_url, email)
+    result = train_model_logic.remote(csv_url, email, job_id)
     return result
