@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 const { createClient } = require("@supabase/supabase-js");
+const { v4: uuidv4 } = require("uuid");
 require("dotenv").config();
 
 // ✅ Supabase Client
@@ -14,6 +15,9 @@ const supabase = createClient(
 );
 
 const app = express();
+
+// ✅ In-memory Job Store (For real-time progress)
+const jobs = {};
 
 // ✅ Middleware
 app.use(cors());
@@ -28,6 +32,15 @@ app.get("/", (req, res) => {
 // ✅ Test POST Route (For debugging SSL/Network issues)
 app.post("/api/test-post", (req, res) => {
   res.json({ status: "success", message: "POST connection working!" });
+});
+
+// ✅ Status Polling API
+app.get("/api/status/:jobId", (req, res) => {
+  const job = jobs[req.params.jobId];
+  if (!job) {
+    return res.status(404).json({ status: "error", message: "Job not found" });
+  }
+  res.json(job);
 });
 
 // ✅ Ensure uploads folder exists
@@ -49,6 +62,7 @@ app.post(
   "/api/upload",
   upload.fields([{ name: "csv", maxCount: 1 }]),
   async (req, res) => {
+    const jobId = uuidv4();
     try {
       // ✅ Validation
       if (!req.files?.csv) {
@@ -61,6 +75,14 @@ app.post(
       if (!email) {
         return res.status(400).json({ message: "Email is required" });
       }
+
+      // Initialize Job
+      jobs[jobId] = {
+        id: jobId,
+        status: "uploading",
+        progress: 10,
+        email,
+      };
 
       console.log("CSV uploaded:", csvPath);
       console.log("Email:", email);
@@ -85,6 +107,8 @@ app.post(
       } = supabase.storage.from("ml-datasets").getPublicUrl(csvData.path);
 
       console.log("CSV Public URL:", csvUrl);
+      jobs[jobId].status = "training";
+      jobs[jobId].progress = 40;
 
       // ✅ Delete local file (important on Render)
       fs.unlinkSync(csvPath);
@@ -98,6 +122,7 @@ app.post(
         {
           csvUrl,
           email,
+          jobId, // Pass jobId to n8n
           callback_url: n8nCallbackUrl,
         },
         {
@@ -111,12 +136,11 @@ app.post(
       res.json({
         status: "success",
         message: "CSV uploaded & ML training started",
-        csvUrl,
-        email,
-        callback_url: n8nCallbackUrl,
+        jobId,
       });
     } catch (error) {
       console.error("Upload error:", error.message);
+      if (jobs[jobId]) jobs[jobId].status = "error";
       res.status(500).json({
         status: "error",
         message: "Server error during upload",
@@ -129,7 +153,14 @@ app.post(
 app.post("/api/callback", async (req, res) => {
   try {
     console.log("Callback received from n8n:", req.body);
-    // You can add logic here to save results to Supabase or notify the user
+    const { jobId, status, display_metric, message } = req.body;
+
+    if (jobId && jobs[jobId]) {
+      jobs[jobId].status = status || "completed";
+      jobs[jobId].progress = 100;
+      jobs[jobId].result = { display_metric, message };
+    }
+
     res.json({ status: "success", message: "Callback processed" });
   } catch (error) {
     console.error("Callback error:", error.message);
