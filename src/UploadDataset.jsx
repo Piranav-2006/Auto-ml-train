@@ -19,16 +19,23 @@ function UploadDataset() {
         formData.append("email", email);
 
         try {
+            const apiUrl = `${process.env.REACT_APP_API_URL || "http://localhost:5000"}/api/upload`;
+            console.log("Attempting upload to:", apiUrl);
             setStatus("Uploading dataset...");
+
             await axios.post(
-                `${process.env.REACT_APP_API_URL || "http://localhost:5000"}/api/upload`,
+                apiUrl,
                 formData,
                 { headers: { "Content-Type": "multipart/form-data" } }
             );
             setStatus("✅ Dataset uploaded successfully");
         } catch (err) {
-            console.error(err);
-            setStatus("❌ Upload failed");
+            console.error("Full Error Object:", err);
+            console.error("Error Message:", err.message);
+            if (err.response) {
+                console.error("Server Response Data:", err.response.data);
+            }
+            setStatus(`❌ Upload failed: ${err.message}`);
         }
     };
 
