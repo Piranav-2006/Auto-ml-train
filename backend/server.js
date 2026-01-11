@@ -110,6 +110,9 @@ app.post(
       jobs[jobId].status = "training";
       jobs[jobId].progress = 40;
 
+      // ✅ Delete local file (important on Render)
+      if (fs.existsSync(csvPath)) fs.unlinkSync(csvPath);
+
       // ✅ Trigger n8n Workflow
       const n8nUploadUrl = process.env.N8N_UPLOAD_WEBHOOK || "https://n8n-1-wpup.onrender.com/webhook-test/ml-upload";
       const n8nCallbackUrl = process.env.N8N_CALLBACK_URL || "https://auto-ml-train.onrender.com/api/callback";
