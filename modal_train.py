@@ -1,0 +1,160 @@
+import modal
+import pandas as pd
+import numpy as np
+import time
+import io
+import requests
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, mean_squared_error, r2_score
+from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
+from sklearn.preprocessing import LabelEncoder
+
+# 1. Define the Modal Image
+image = modal.Image.debian_slim().pip_install(
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "requests",
+    "fastapi"
+)
+
+app = modal.App("auto-ml-trainer")
+
+@app.function(image=image, timeout=600, cpu=2.0, memory=4096)
+def train_model_logic(csv_url, email):
+    start_time = time.time()
+    def log(msg):
+        print(f"--- [{time.time() - start_time:.2f}s] {msg}")
+
+    try:
+        log(f"STARTING TRAINING for user {email}")
+        
+        # 1. Download CSV with better handling
+        log(f"Connecting to: {csv_url}")
+        try:
+            r = requests.get(csv_url, timeout=20, stream=True)
+            r.raise_for_status()
+            # Use chunks to avoid memory hang
+            buffer = io.BytesIO()
+            for chunk in r.iter_content(chunk_size=8192):
+                buffer.write(chunk)
+            buffer.seek(0)
+            # Increased rows for better accuracy
+            df = pd.read_csv(buffer, nrows=20000)
+            log(f"CSV Loaded. Shape: {df.shape}")
+        except Exception as e:
+            log(f"Download FAILED: {str(e)}")
+            return {"status": "Error", "message": f"Download failed: {str(e)}"}
+
+        # 2. Identify Target
+        target_col = df.columns[-1]
+        log(f"Target column detected: {target_col}")
+        df = df.dropna(subset=[target_col])
+        
+        # 3. Aggressive Feature Selection
+        log("Cleaning data...")
+        cols_to_drop = []
+        for col in df.columns:
+            if col == target_col: continue
+            uniques = df[col].nunique()
+            # Drop if it's an ID or has no information.
+            # Relaxed category limit from 100 to 500
+            if uniques == len(df) or (df[col].dtype == 'object' and uniques > 500) or uniques <= 1:
+                cols_to_drop.append(col)
+        
+        if cols_to_drop:
+            log(f"Dropping columns: {cols_to_drop}")
+            df = df.drop(columns=cols_to_drop)
+
+        # 4. Prepare X and y
+        X = df.drop(columns=[target_col])
+        y = df[target_col]
+
+        # Handle Categorical Columns for Scikit-Learn (Label Encode)
+        cat_cols = X.select_dtypes(include=['object']).columns
+        log(f"Encoding {len(cat_cols)} categorical columns...")
+        for col in cat_cols:
+            le = LabelEncoder()
+            X[col] = le.fit_transform(X[col].astype(str).fillna("Missing"))
+
+        # Determine Problem Type
+        n_unique_y = y.nunique()
+        if y.dtype == 'object' or n_unique_y < 15:
+            problem_type = "classification"
+            # Filter classes with only 1 member (causes train_test_split failure)
+            class_counts = y.value_counts()
+            rare_classes = class_counts[class_counts < 2].index
+            if not rare_classes.empty:
+                log(f"Removing rare classes with only 1 sample: {list(rare_classes)}")
+                mask = ~y.isin(rare_classes)
+                X = X[mask]
+                y = y[mask]
+            
+            le_y = LabelEncoder()
+            y = le_y.fit_transform(y.astype(str))
+            log(f"Detected: Classification ({len(le_y.classes_)} classes)")
+        else:
+            problem_type = "regression"
+            log("Detected: Regression")
+
+        # 5. Fast Training with HistGradientBoosting (Lightning Fast)
+        log("Initializing fast training...")
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        if problem_type == "classification":
+            # Better hyperparameters for accuracy
+            model = HistGradientBoostingClassifier(
+                max_iter=300, 
+                max_depth=10, 
+                early_stopping=True,
+                random_state=42
+            )
+            model.fit(X_train, y_train)
+            acc = accuracy_score(y_test, model.predict(X_test))
+            log(f"Classification DONE. Acc: {acc:.4f}")
+            result = {
+                "status": "Complete", 
+                "metrics": {"accuracy": float(acc)},
+                "accuracy_formatted": f"{acc*100:.2f}%",
+                "message": f"Cloud training successful! (Trained on {len(df)} rows)"
+            }
+        else:
+            model = HistGradientBoostingRegressor(
+                max_iter=300, 
+                max_depth=10, 
+                early_stopping=True,
+                random_state=42
+            )
+            model.fit(X_train, y_train)
+            mse = mean_squared_error(y_test, model.predict(X_test))
+            r2 = r2_score(y_test, model.predict(X_test))
+            log(f"Regression DONE. R2: {r2:.4f}")
+            result = {
+                "status": "Complete", 
+                "metrics": {"r2": float(r2), "rmse": float(np.sqrt(mse))},
+                "message": f"Cloud training successful! (Trained on {len(df)} rows)"
+            }
+            
+        log("FINISHED.")
+        return result
+
+    except Exception as e:
+        log(f"FATAL ERROR: {str(e)}")
+        return {"status": "Error", "message": str(e)}
+
+@app.function(image=image, timeout=600)
+@modal.fastapi_endpoint(method="POST")
+def train(data: dict):
+    # Handle POST request
+    if not data:
+        return {"error": "JSON body is missing"}
+
+    csv_url = data.get('csvUrl') or data.get('csv_url')
+    email = data.get('email')
+
+    if not csv_url or not email:
+        return {"error": "csvUrl and email are required (POST json fields)"}
+
+    # Run the training logic cloud-side
+    result = train_model_logic.remote(csv_url, email)
+    return result

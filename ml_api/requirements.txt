@@ -1,9 +1,0 @@
-flask
-pandas
-scikit-learn
-xgboost
-catboost
-python-dotenv
-gunicorn
-axios
-requests
