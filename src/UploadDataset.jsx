@@ -12,35 +12,7 @@ function UploadDataset() {
     const [result, setResult] = useState(null);
     const [errorMsg, setErrorMsg] = useState("");
 
-    // Polling logic
-    useEffect(() => {
-        let interval;
-        if (status === "training" && jobId) {
-            interval = setInterval(async () => {
-                try {
-                    const res = await axios.get(`${API_BASE_URL}/api/status/${jobId}`);
-                    const job = res.data;
-
-                    if (job.status === "completed") {
-                        setStatus("completed");
-                        setProgress(100);
-                        setResult(job.result);
-                        clearInterval(interval);
-                    } else if (job.status === "error") {
-                        setStatus("error");
-                        setErrorMsg("Cloud training failed. Please check your data.");
-                        clearInterval(interval);
-                    } else {
-                        // Smoothly increment progress
-                        setProgress(prev => Math.min(prev + 2, 95));
-                    }
-                } catch (err) {
-                    console.error("Polling error:", err);
-                }
-            }, 3000);
-        }
-        return () => clearInterval(interval);
-    }, [status, jobId]);
+    // No polling needed for async flow
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -58,7 +30,7 @@ function UploadDataset() {
         if (!csv || !email) return;
 
         setStatus("uploading");
-        setProgress(10);
+        setProgress(30);
         setErrorMsg("");
         setResult(null);
 
@@ -67,13 +39,19 @@ function UploadDataset() {
         formData.append("email", email);
 
         try {
-            const res = await axios.post(`${API_BASE_URL}/api/upload`, formData, {
+            await axios.post(`${API_BASE_URL}/api/upload`, formData, {
                 headers: { "Content-Type": "multipart/form-data" }
             });
 
-            setJobId(res.data.jobId);
-            setStatus("training");
-            setProgress(30);
+            // Immediate Success for Async Flow
+            setStatus("completed");
+            setProgress(100);
+            setResult({
+                type: "async_success",
+                display_metric: "Processing",
+                message: "Your model is training in the background."
+            });
+
         } catch (err) {
             setStatus("error");
             setErrorMsg(err.response?.data?.message || err.message);
@@ -140,14 +118,14 @@ function UploadDataset() {
                     <div className="result-card">
                         <div className="result-header">
                             <div className="success-icon">✓</div>
-                            <h2 className="result-title">Training Complete!</h2>
-                            <p className="result-subtitle">Your ML model has been successfully trained</p>
+                            <h2 className="result-title">Upload Successful!</h2>
+                            <p className="result-subtitle">Your dataset is now being processed</p>
                         </div>
 
                         <div className="metric-showcase">
                             <div className="metric-badge">
-                                <span className="metric-label">Model Performance</span>
-                                <span className="metric-value">{result.display_metric}</span>
+                                <span className="metric-label">Status</span>
+                                <span className="metric-value" style={{ fontSize: '2rem' }}>Training Started</span>
                             </div>
                         </div>
 
@@ -169,8 +147,8 @@ function UploadDataset() {
                             <div className="detail-item">
                                 <span className="detail-icon">📧</span>
                                 <div className="detail-content">
-                                    <p className="detail-label">Email Report</p>
-                                    <p className="detail-value">Sent to {email}</p>
+                                    <p className="detail-label">Next Step</p>
+                                    <p className="detail-value">Check your email: {email}</p>
                                 </div>
                             </div>
                         </div>

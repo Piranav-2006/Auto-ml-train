@@ -118,25 +118,31 @@ app.post(
       const n8nCallbackUrl = process.env.N8N_CALLBACK_URL || "https://auto-ml-train-1.onrender.com/api/callback";
 
       console.log("Triggering n8n at:", n8nUploadUrl);
-      const n8nRes = await axios.post(
+
+      // Fire and forget - Don't await
+      axios.post(
         n8nUploadUrl,
         {
           csvUrl,
           email,
-          jobId, // Pass jobId to n8n
+          jobId,
           callback_url: n8nCallbackUrl,
         },
         {
           headers: { "Content-Type": "application/json" },
           timeout: 10000,
         }
-      );
-
-      console.log("n8n workflow triggered successfully. Response status:", n8nRes.status);
+      ).then(response => {
+        console.log("n8n workflow triggered successfully. Status:", response.status);
+      }).catch(err => {
+        console.error("Failed to trigger n8n workflow:", err.message);
+        // We can optionally update job status to error here if needed, 
+        // but the user has already received a success response.
+      });
 
       res.json({
         status: "success",
-        message: "CSV uploaded & ML training started",
+        message: "Upload complete. Results will be emailed.",
         jobId,
       });
     } catch (error) {
