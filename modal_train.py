@@ -205,7 +205,7 @@ def train(data: dict):
 
     csv_url = data.get('csvUrl') or data.get('csv_url')
     email = data.get('email')
-    job_id = data.get('jobId') or data.get('job_id')
+    job_id = data.get('job_id') or data.get('jobId')
 
     if not csv_url or not email:
         return {"error": "csvUrl and email are required (POST json fields)"}
@@ -213,3 +213,20 @@ def train(data: dict):
     # Run the training logic cloud-side
     result = train_model_logic.remote(csv_url, email, job_id)
     return result
+
+@app.function(image=image)
+@modal.fastapi_endpoint(method="GET")
+def status():
+    return {
+        "status": "online",
+        "message": "Auto-ML Trainer API is up and running. Use POST to /train to start a job.",
+        "usage": {
+            "method": "POST",
+            "endpoint": "/train",
+            "body": {
+                "csv_url": "string",
+                "email": "string",
+                "job_id": "string (optional)"
+            }
+        }
+    }

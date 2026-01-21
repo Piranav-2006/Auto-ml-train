@@ -23,6 +23,8 @@ const jobs = {};
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// ✅ Serve static files from the React app
+app.use(express.static(path.join(__dirname, "../build")));
 
 // ✅ Health Check Route
 app.get("/", (req, res) => {
@@ -113,11 +115,13 @@ app.post(
       // ✅ Delete local file (important on Render)
       if (fs.existsSync(csvPath)) fs.unlinkSync(csvPath);
 
-      // ✅ Trigger n8n Workflow (PRODUCTION MODE)
-      const n8nUploadUrl = process.env.N8N_UPLOAD_WEBHOOK || "https://n8n-1-wpup.onrender.com/webhook/ml-upload";
+      // ✅ Trigger n8n Workflow (TEST MODE)
+      // NOTE: For 'webhook-test' to work, your n8n Editor UI must be OPEN and waiting for execution.
+      const n8nUploadUrl = process.env.N8N_UPLOAD_WEBHOOK || "https://n8n-1-wpup.onrender.com/webhook-test/ml-upload";
       const n8nCallbackUrl = process.env.N8N_CALLBACK_URL || "https://auto-ml-train-1.onrender.com/api/callback";
 
-      console.log("Triggering n8n at:", n8nUploadUrl);
+      console.log("Triggering n8n (TEST MODE) at:", n8nUploadUrl);
+      console.log("⚠️ Make sure n8n Editor is open and 'Execute Workflow' is active!");
 
       // Fire and forget - Don't await
       axios.post(
@@ -180,6 +184,11 @@ app.post("/api/callback", async (req, res) => {
     console.error("Callback error:", error.message);
     res.status(500).json({ status: "error", message: "Failed to process callback" });
   }
+});
+
+// ✅ Catch-all route to serve React's index.html
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../build", "index.html"));
 });
 
 // ✅ Start server (Render-compatible)

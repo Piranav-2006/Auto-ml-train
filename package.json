@@ -31,7 +31,8 @@
     "test": "react-app-rewired test",
     "eject": "react-scripts eject",
     "backend": "npm start --prefix backend",
-    "dev": "concurrently \"npm start\" \"npm run backend\""
+    "dev": "concurrently \"npm start\" \"npm run backend\"",
+    "production-start": "node backend/server.js"
   },
   "eslintConfig": {
     "extends": [
