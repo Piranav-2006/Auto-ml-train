@@ -9,11 +9,17 @@ const { createClient } = require("@supabase/supabase-js");
 const { v4: uuidv4 } = require("uuid");
 require("dotenv").config();
 
-// ✅ Supabase Client
+// ✅ Supabase Client Validation
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
+  console.error("❌ CRITICAL ERROR: SUPABASE_URL or SUPABASE_KEY is missing from environment variables!");
+}
+
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_URL || "https://placeholder.supabase.co",
+  process.env.SUPABASE_KEY || "placeholder-key"
 );
+
+console.log("Supabase Client initialized for:", process.env.SUPABASE_URL ? "Actual URL" : "Placeholder");
 
 const app = express();
 
