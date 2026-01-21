@@ -117,7 +117,7 @@ app.post(
 
       // ✅ Trigger n8n Workflow (TEST MODE)
       // NOTE: For 'webhook-test' to work, your n8n Editor UI must be OPEN and waiting for execution.
-      const n8nUploadUrl = process.env.N8N_UPLOAD_WEBHOOK || "https://n8n-1-wpup.onrender.com/webhook-test/ml-upload";
+      const n8nUploadUrl = process.env.N8N_UPLOAD_WEBHOOK || "https://n8n-r920.onrender.com/webhook-test/ml-upload";
       const n8nCallbackUrl = process.env.N8N_CALLBACK_URL || "https://auto-ml-train-1.onrender.com/api/callback";
 
       console.log("Triggering n8n (TEST MODE) at:", n8nUploadUrl);
