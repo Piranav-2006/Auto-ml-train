@@ -196,7 +196,7 @@ app.get("/api/callback", (req, res) => {
 });
 
 // ✅ Catch-all route to serve React's index.html
-app.get("/:path*", (req, res) => {
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, "../build", "index.html"));
 });
 
