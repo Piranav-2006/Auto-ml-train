@@ -186,6 +186,15 @@ app.post("/api/callback", async (req, res) => {
   }
 });
 
+// ✅ GET handler for /api/callback (Browser friendly check)
+app.get("/api/callback", (req, res) => {
+  res.json({
+    status: "active",
+    message: "This endpoint is alive and waiting for POST data from n8n.",
+    instructions: "n8n will send the results here automatically when training is complete."
+  });
+});
+
 // ✅ Catch-all route to serve React's index.html
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "../build", "index.html"));
